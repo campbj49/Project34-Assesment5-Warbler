@@ -3,9 +3,10 @@ import os
 from flask import Flask, render_template, request, flash, redirect, session, g
 from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_, and_
 
-from forms import UserAddForm, LoginForm, MessageForm
-from models import db, connect_db, User, Message
+from forms import UserAddForm, LoginForm, MessageForm, UserEditForm
+from models import db, connect_db, User, Message, Follows
 
 CURR_USER_KEY = "curr_user"
 
@@ -19,6 +20,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:@localhost:5432/w
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ECHO'] = False
 app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = True
+app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', "it's a secret")
 toolbar = DebugToolbarExtension(app)
 
@@ -113,7 +115,8 @@ def login():
 def logout():
     """Handle logout of user."""
 
-    # IMPLEMENT THIS
+    do_logout()
+    return redirect("/")
 
 
 ##############################################################################
@@ -211,7 +214,30 @@ def stop_following(follow_id):
 def profile():
     """Update profile for current user."""
 
-    # IMPLEMENT THIS
+    form = UserEditForm()
+    user = User.query.get(session[CURR_USER_KEY])
+
+    if form.validate_on_submit():
+        #make sure password is valid
+        user = User.authenticate(user.username, form.password.data)
+
+        if not user:
+            flash("Invalid Password","danger")
+            form.password.data = ""
+            return render_template('users/login.html', form=form)
+        #prevent form from overwriting password hash
+        del(form.password)
+        form.populate_obj(user)
+        db.session.commit()
+        flash(f"Profile updated", "success")
+        return redirect(f"/users/{user.id}")
+
+    form.username.data = user.username
+    form.email.data = user.email
+    form.image_url.data = user.image_url
+    form.header_image_url.data = user.header_image_url
+    form.bio.data = user.bio
+    return render_template('users/edit.html', form=form)
 
 
 @app.route('/users/delete', methods=["POST"])
@@ -292,9 +318,13 @@ def homepage():
     """
 
     if g.user:
+        user_list = [g.user.id]
+        for following in g.user.following:
+            user_list.append(following.id)
         messages = (Message
                     .query
                     .order_by(Message.timestamp.desc())
+                    .filter(Message.user_id.in_(user_list))
                     .limit(100)
                     .all())
 

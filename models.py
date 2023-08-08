@@ -96,6 +96,13 @@ class User(db.Model):
 
     messages = db.relationship('Message')
 
+    following_messages = db.relationship(
+        'Message',
+        secondary="follows",
+        primaryjoin=(Follows.user_following_id == id),
+        secondaryjoin=(Follows.user_being_followed_id == id)
+    )
+
     followers = db.relationship(
         "User",
         secondary="follows",
