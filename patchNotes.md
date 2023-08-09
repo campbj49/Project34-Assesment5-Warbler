@@ -11,3 +11,4 @@
 
 +add like functionality to thumbs up buttons
 +added likes page that shows all liked messages of logged in user
++finished unittests
